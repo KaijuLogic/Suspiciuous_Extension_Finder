@@ -32,6 +32,7 @@
     Last Modified Date: 15 Nov 2025
     Last Modified By: KaijuLogic
     Last Modification Notes: 
+		* Added folder creation to separate runlogs and result logs
         * You might notice spelling inconsistency, recently moved and getting used to using difference spelling norms
         * Added [CmdletBinding()] to script parameters.
         * Added parameter validation for -Path and -Extensions. 
@@ -76,8 +77,8 @@ $CurrentDate = Get-Date
 $CurrentPath = Split-Path -Parent $PSCommandPath
 $GetFiles = Get-ChildItem $path -Recurse
 
-$RunLog = "$CurrentPath\SusExtensionSearcher-Runlog-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
-$Output = "$CurrentPath\SusExtensionSearcher-Result-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
+$RunLog = "$CurrentPath\runlogs\SusExtensionSearcher-Runlog-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
+$Output = "$CurrentPath\results\SusExtensionSearcher-Result-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
 
 #$sw is simply to track how long the script has run for. If it's running too long you might want to break the scan into multiple pieces.
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -103,6 +104,26 @@ Function Write-Log{
     $Stamp = (Get-Date).ToString($TimeStampFormat)
     $Line = "$Stamp | $Level | $Message"
     Add-content $logfile -Value $Line
+}
+#Creates necessary log folders and path if they do not already exist to allow for logs to be created. 
+Function Set-LogFolders {
+    ##Tests for and creates necessary folders and files for the script to run and log appropriately
+    if (!(Test-Path "$CurrentPath\runlogs\")) {
+        Try{
+            New-Item -Path "$CurrentPath\runlogs\" -ItemType "directory" | out-null
+        }
+        Catch {
+            Write-Warning "Issue Creating $LogFolder maybe try manual creation? Error: $($_.ErrorDetails.Message)"
+        }
+    }
+    if (!(Test-Path "$CurrentPath\results\")) {
+        Try{
+            New-Item -Path "$CurrentPath\results\" -ItemType "directory" | out-null
+        }
+        Catch {
+            Write-Warning "Issue Creating $LogFolder maybe try manual creation? Error: $($_.ErrorDetails.Message)"
+        }
+    }
 }
 #This function gets a list of files and compares them to the extensions list found in the extensions file. 
 Function Get-SusFilesTypes{
@@ -197,6 +218,7 @@ Function Get-SusFilesTypes{
 #################################### EXECUTION #####################################
 
 try {
+	Set-LogFolders
     Write-Log -level INFO -message "Suspicious extension search script ran by $Env:UserName on $Env:ComputerName" -logfile $RunLog 
     Get-SusFilesTypes
     Write-Log -level INFO -message "Script finished successfully." -logfile $RunLog 
