@@ -1,62 +1,86 @@
 <#
     .DISCLAIMER:
-    By using this content you agree to the following: This script may be used for legal purposes only. Users take full responsibility 
-    for any actions performed using this script. The author accepts no liability for any damage caused by this script.  
+    By using this content you agree to the following: This script may be used for legal purposes only. 
+    Users take full responsibility for any actions performed using this script. The author accepts no liability 
+    for any damage caused by this script.  
 
     .SYNOPSIS
     This script can be used to do a quick search for files that should receive additional review against a list of provided extensions. 
 
     .DESCRIPTION
-    Certain file types in the environment should receive addional review to help ensure security. This script will take a specified path and scan folders/subfolders and
-    compare the file extension of each file found against a list of extensions. If the item is found the full path to the file will be displayed. 
-    The complete list will also be written to a txt file in the directory where the script is run, titled SusExtensionSearcher-Results-yyyy-MM-dd.HH.mm.txt. 
-	The script will also create a runlog file that contains a summary of who ran the script and when, how many files were found, how long the scan took etc. 
-	Note that this is just a simple check for extensions and isn't advanced enough to be able to tell if a file is hiding behind a different extension or multiple extensions. 
-	This script can be helpful for a basic check but should NOT be used as your only check. 
+    Certain file types in secure environments should receive additional review to help ensure security. 
+    This script will scan a specified path, including folders/subfolders, and compare the file extension of 
+    each file found against a list of extensions. If the item is found, the full path to the file will be displayed. 
+    The complete list will also be written to a txt file in the directory where the script is run, titled 
+    SusExtensionSearcher-Result-yyyy-MM-dd.HH.mm.txt. The script will also create a runlog file that contains a 
+    summary of who ran the script, when, how many files were found, and how long the scan took, among other details. 
+    Note that this is a basic check for extensions and isn't advanced enough to determine if a file is using more advanced techniques to hide. 
+    This script can be helpful,  but should NOT be used as your only check. 
 
-    .PARAMETER path
-    -Path:  Used to specify what path you want to scan. please be aware of the size of directory and subdirectories you are trying to scan
+    .PARAMETER Path
+    Used to specify what path you want to scan. please be aware of the size of directory and subdirectories you are trying to scan
 
-    .PARAMETER extensions
-    -Extensions: This designates a path to the extensions list you are wanting to check. The file should be a list of extensions with each type on a new line. 
+    .PARAMETER Extensions
+    This designates a path to the extensions list you are wanting to check. The file should be a list of extensions with each type on a new line. 
 
     .EXAMPLE
-    Suspiciuous_Extension_Finder.ps1 -path C:\Users\Hydrophobia\Downloads -extensions C:\Users\Hydrophobia\Downloads\extensions.txt
+    Suspicious_Extension_Finder.ps1 -path C:\Users\Hydrophobia\Downloads -extensions C:\Users\Hydrophobia\Downloads\extensions.txt
 
     .NOTES
-    Created by: Hydrophobia
+    Created by: KaijuLogic
     Created Date: 4.2024
-    Last Modified Date: 4.19.2024
-    Last Modified By: Hydrophobia
+    Last Modified Date: 15 Nov 2025
+    Last Modified By: KaijuLogic
     Last Modification Notes: 
+        * You might notice spelling inconsistency, recently moved and getting used to using difference spelling norms
+        * Added [CmdletBinding()] to script parameters.
+        * Added parameter validation for -Path and -Extensions. 
+        * Recently learned about "Hashsets", trying them out for effeciency if large extension lists are provided
+        * Added checks to make sure all names in the extension list are 'normalised'
+        * Simplifying a few small things to make things a little less cluttered (ex: moving $user and $computer variables since they were only used once)
+        * Added some more error catching
+        * Fixed some spelling errors
 
-    TO-DO: Add better notes and more error checking
-		   Add simple check for files that may be using multiple extensions
+    TO-DO: Done: Add better notes and more error checking
+		   Done: Add simple check for files that may be using multiple extensions
 			
 #>
 
 #################################### PARAMETERS ###################################
 param (
+    [CmdletBinding()]
     [Parameter(Mandatory=$true)]
+    [ValidateScript({
+        if (Test-Path $_ -PathType Container) {
+            return $True
+        } else {
+            Exit
+        }
+
+    })]
     [String]$path,
 
     [Parameter(Mandatory=$true)]
+    [ValidateScript({
+        if (Test-Path $_ -PathType Leaf) {
+            return $True
+        } else {
+            Exit
+        }
+    })]
     [String]$extensions
+    
 )
-################################# EDITABLE VARIABLES #################################
-
 ################################# SET COMMON VARIABLES ################################
-$ExtensionsList = Get-Content $extensions
 $CurrentDate = Get-Date
 $CurrentPath = Split-Path -Parent $PSCommandPath
 $GetFiles = Get-ChildItem $path -Recurse
-$Computer = $Env:ComputerName
-$User = $Env:UserName
+
 $RunLog = "$CurrentPath\SusExtensionSearcher-Runlog-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
 $Output = "$CurrentPath\SusExtensionSearcher-Result-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
+
 #$sw is simply to track how long the script has run for. If it's running too long you might want to break the scan into multiple pieces.
 $sw = [Diagnostics.Stopwatch]::StartNew()
-#Sets Timestamp format for the runlog
 $TimeStampFormat = "yyyy-MM-dd HH:mm:ss"
 #################################### FUNCTIONS #######################################
 #This function is simply used to create a run log for the script. This is useful for troubleshooting and tracking
@@ -85,28 +109,100 @@ Function Get-SusFilesTypes{
     #Initialize counting variables for, well, counting
     $SusItemsCount = 0
     $FileCount = 0
-    Write-Output "$($GetFiles.Count) total files/folders found" | Out-File $output -Append
-    Write-Log -level INFO -message "$($GetFiles.Count) total files/folders found at $Path" -logfile $RunLog     
+    
+    #initialise hashset and import results 
+    Write-Log -level INFO -message "Loading extensions list from $extensions" -logfile $RunLog
+    $ExtensionsHashSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    #Normalise the extensions list to reduce possiblility of errors: all extensions should start with a "." . 
+    try {
+        $RawExtensions = Get-Content $extensions -ErrorAction Stop
+        foreach ($ext in $RawExtensions) {
+            if (-not [string]::IsNullOrWhiteSpace($ext)) {
+                $NormaliseExt = if ($ext.StartsWith('.')) { $ext } else { ".$ext" }
+                $ExtensionsHashSet.Add($NormaliseExt) | Out-Null
+            }
+        }
+        Write-Log -level INFO -message "Loaded and normalised $($ExtensionsHashSet.Count) case-insensitive extensions." -logfile $RunLog
+    }
+    catch {
+        Write-Log -level FATAL -message "Failed to read or process extensions file '$extensions'. Error: $_" -logfile $RunLog
+        Write-Error "Failed to read extensions file. Check runlog for details."
+        return
+    }
+
+    $message = "$($GetFiles.Count) total files/folders found"
+    Write-Output $message | Out-File $output -Append
+    Write-Log -level INFO -message $message -logfile $RunLog   
+
+    $message = "Starting scan on path: $path"
+    Write-Log -level INFO -message $message -logfile $RunLog  
+    Write-Output $message
+
     #Comapre each item in the designated path to the list in the extensions file.  
-    Foreach($File in $GetFiles){
-        Write-Progress "Checking File $FileCount of $($GetFiles.Count)"
-        $FileCount ++
-		If($file.Extension -in $ExtensionsList){
-            Write-Output "$($File.Fullname)" 
-            $SusItemsCount ++
-            #Store results in a variable for making the report at the end `n adds a new line so each item is on a new line. Otherwise the report will be a pain to read
-            $SUSList += "$($File.Fullname)`n"
+    try{
+        Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $FileCount++
+            $file = $_ # Assign to a variable for clarity
+            $foundExt = $false # Flag to prevent logging the same file twice
+
+            if ($ExtensionsHashSet.Contains($file.Extension)) {
+                    $SusItemsCount++
+                    $Fullpath = $file.Fullname
+                    
+                    # Add context to the output
+                    $Message = "Suspicious extension [ $($file.Extension) ] at $Fullpath"
+                    Write-Output $Message
+                    Add-Content -Path $Output -Value $Message
+                    $foundExt = $true
+            }
+
+            ### SIMPLE CHECK TO TRY AND FIND HIDDEN EXTENSION
+            # This is only a "low hanging fruit" check. Don't rely only on this for file security.
+            $hiddenExtension = [System.IO.Path]::GetExtension($file.BaseName)
+
+            if ((-not [string]::IsNullOrEmpty($hiddenExtension)) -and $ExtensionsHashSet.Contains($hiddenExtension)) {
+                # Only log this if it wasn't found already
+                if (-not $foundExt) {
+                    $SusItemsCount++
+                    $Fullpath = $file.Fullname
+                    
+                    $Message = "Suspicious hidden extension [ $hiddenExtension ] at $Fullpath"
+                    Write-Output $Message
+                    Add-Content -Path $Output -Value $Message
+                }
+            }
         }
     }
-    #After checking each file give the final results and some stats from the scan. 
-    Write-Output "$SusItemsCount total suspicious files found" | Out-File $output -Append
-    Write-Log -level INFO -message "$SusItemsCount total suspicious files found" -logfile $RunLog     
-    $sw.stop()
-    Write-Output "Extension check took $($sw.elapsed)"
-    Write-Log -level INFO -message "Suspicious Extension check took $($sw.elapsed) to run" -logfile $RunLog
-    $SUSList | Out-File $output -Append
+    catch {
+        $message = "Something went wrong during file processing scan ERROR: $_ "
+        Write-Log -level INFO -message $message -logfile $RunLog  
+        Write-Output $message
+    }
+    Finally{
+        #After checking each file give the final results and some stats from the scan. 
+        $message = "$SusItemsCount total suspicious files found"
+        Write-Output $message
+        Add-Content -Path $Output -Value $Message
+        Write-Log -level INFO -message $message -logfile $RunLog   
+
+        $sw.stop()
+
+        $message = "Suspicious Extension check took $($sw.elapsed) to run"
+        Write-Output $message
+        Write-Log -level INFO -message $message -logfile $RunLog
+        Add-Content -Path $Output -Value $Message
+    }
+
 }
 #################################### EXECUTION #####################################
 
-Write-Log -level INFO -message "Suspicious extension search script ran by $user on $Computer" -logfile $RunLog 
-Get-SusFilesTypes
+try {
+    Write-Log -level INFO -message "Suspicious extension search script ran by $Env:UserName on $Env:ComputerName" -logfile $RunLog 
+    Get-SusFilesTypes
+    Write-Log -level INFO -message "Script finished successfully." -logfile $RunLog 
+}
+catch {
+    # Catch any terminating errors from parameter validation or other unhandled exceptions
+    Write-Log -level FATAL -message "Script failed to run with a fatal error: $_" -logfile $RunLog
+    Write-Error "Script failed for some reason. Check runlog for more details: $RunLog"
+}
