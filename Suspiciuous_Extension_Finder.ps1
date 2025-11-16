@@ -29,18 +29,21 @@
     .NOTES
     Created by: KaijuLogic
     Created Date: 4.2024
-    Last Modified Date: 15 Nov 2025
+    Last Modified Date: 16 Nov 2025
     Last Modified By: KaijuLogic
     Last Modification Notes: 
-		* Added folder creation to separate runlogs and result logs
-        * You might notice spelling inconsistency, recently moved and getting used to using difference spelling norms
-        * Added [CmdletBinding()] to script parameters.
-        * Added parameter validation for -Path and -Extensions. 
-        * Recently learned about "Hashsets", trying them out for effeciency if large extension lists are provided
-        * Added checks to make sure all names in the extension list are 'normalised'
-        * Simplifying a few small things to make things a little less cluttered (ex: moving $user and $computer variables since they were only used once)
-        * Added some more error catching
-        * Fixed some spelling errors
+        - 16 Nov, 2025
+            * Cleaned up log folder creation a bit more
+        - 15 Nov, 2025
+            * Added folder creation to separate runlogs and result logs
+            * You might notice spelling inconsistency, recently moved and getting used to using difference spelling norms
+            * Added [CmdletBinding()] to script parameters.
+            * Added parameter validation for -Path and -Extensions. 
+            * Recently learned about "Hashsets", trying them out for effeciency if large extension lists are provided
+            * Added checks to make sure all names in the extension list are 'normalised'
+            * Simplifying a few small things to make things a little less cluttered (ex: moving $user and $computer variables since they were only used once)
+            * Added some more error catching
+            * Fixed some spelling errors
 
     TO-DO: Done: Add better notes and more error checking
 		   Done: Add simple check for files that may be using multiple extensions
@@ -82,7 +85,7 @@ $Output = "$CurrentPath\results\SusExtensionSearcher-Result-$($CurrentDate.ToStr
 
 #$sw is simply to track how long the script has run for. If it's running too long you might want to break the scan into multiple pieces.
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$TimeStampFormat = "yyyy-MM-dd HH:mm:ss"
+
 #################################### FUNCTIONS #######################################
 #This function is simply used to create a run log for the script. This is useful for troubleshooting and tracking
 Function Write-Log{
@@ -101,27 +104,29 @@ Function Write-Log{
         [string]
         $logfile
     )
-    $Stamp = (Get-Date).ToString($TimeStampFormat)
+    $Stamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     $Line = "$Stamp | $Level | $Message"
     Add-content $logfile -Value $Line
 }
 #Creates necessary log folders and path if they do not already exist to allow for logs to be created. 
 Function Set-LogFolders {
     ##Tests for and creates necessary folders and files for the script to run and log appropriately
-    if (!(Test-Path "$CurrentPath\runlogs\")) {
+    $LogFolder = Split-Path $RunLog -Parent
+    if (!(Test-Path $LogFolder)) {
         Try{
-            New-Item -Path "$CurrentPath\runlogs\" -ItemType "directory" | out-null
+            New-Item -Path $LogFolder -ItemType "directory" | out-null
         }
         Catch {
-            Write-Warning "Issue Creating $LogFolder maybe try manual creation? Error: $($_.ErrorDetails.Message)"
+            Write-Warning "Issue Creating $LogFolder. ERROR: $($_.ErrorDetails.Message)"
         }
     }
-    if (!(Test-Path "$CurrentPath\results\")) {
+    $LogFolder = Split-Path $Output -Parent
+    if (!(Test-Path $LogFolder)) {
         Try{
-            New-Item -Path "$CurrentPath\results\" -ItemType "directory" | out-null
+            New-Item -Path $LogFolder -ItemType "directory" | out-null
         }
         Catch {
-            Write-Warning "Issue Creating $LogFolder maybe try manual creation? Error: $($_.ErrorDetails.Message)"
+            Write-Warning "Issue Creating $LogFolder. ERROR: $($_.ErrorDetails.Message)"
         }
     }
 }
