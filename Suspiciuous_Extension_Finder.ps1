@@ -81,7 +81,7 @@ $CurrentPath = Split-Path -Parent $PSCommandPath
 $GetFiles = Get-ChildItem $path -Recurse
 
 $RunLog = "$CurrentPath\runlogs\SusExtensionSearcher-Runlog-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
-$Output = "$CurrentPath\results\SusExtensionSearcher-Result-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
+$ResultLog = "$CurrentPath\results\SusExtensionSearcher-Result-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
 
 #$sw is simply to track how long the script has run for. If it's running too long you might want to break the scan into multiple pieces.
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -111,22 +111,17 @@ Function Write-Log{
 #Creates necessary log folders and path if they do not already exist to allow for logs to be created. 
 Function Set-LogFolders {
     ##Tests for and creates necessary folders and files for the script to run and log appropriately
-    $LogFolder = Split-Path $RunLog -Parent
-    if (!(Test-Path $LogFolder)) {
-        Try{
-            New-Item -Path $LogFolder -ItemType "directory" | out-null
-        }
-        Catch {
-            Write-Warning "Issue Creating $LogFolder. ERROR: $($_.ErrorDetails.Message)"
-        }
-    }
-    $LogFolder = Split-Path $Output -Parent
-    if (!(Test-Path $LogFolder)) {
-        Try{
-            New-Item -Path $LogFolder -ItemType "directory" | out-null
-        }
-        Catch {
-            Write-Warning "Issue Creating $LogFolder. ERROR: $($_.ErrorDetails.Message)"
+    $FolderList = ($RunLog,$ResultLog)
+    foreach ($Folder in $Folderlist){
+        $LogFolder = Split-Path $Folder -Parent
+        if (!(Test-Path $LogFolder)) {
+            Write-Verbose "$LogFolder does not exist, creating path"
+            try{
+                New-Item -Path $LogFolder -ItemType "directory" | out-null
+            }
+            catch{
+                Write-Warning "Issue Creating $LogFolder. ERROR: $($_.ErrorDetails.Message)"
+            }
         }
     }
 }
@@ -157,7 +152,7 @@ Function Get-SusFilesTypes{
     }
 
     $message = "$($GetFiles.Count) total files/folders found"
-    Write-Output $message | Out-File $output -Append
+    Write-Output $message | Out-File $ResultLog -Append
     Write-Log -level INFO -message $message -logfile $RunLog   
 
     $message = "Starting scan on path: $path"
@@ -178,7 +173,7 @@ Function Get-SusFilesTypes{
                     # Add context to the output
                     $Message = "Suspicious extension [ $($file.Extension) ] at $Fullpath"
                     Write-Output $Message
-                    Add-Content -Path $Output -Value $Message
+                    Add-Content -Path $ResultLog -Value $Message
                     $foundExt = $true
             }
 
@@ -194,29 +189,29 @@ Function Get-SusFilesTypes{
                     
                     $Message = "Suspicious hidden extension [ $hiddenExtension ] at $Fullpath"
                     Write-Output $Message
-                    Add-Content -Path $Output -Value $Message
+                    Add-Content -Path $ResultLog -Value $Message
                 }
             }
         }
     }
     catch {
         $message = "Something went wrong during file processing scan ERROR: $_ "
-        Write-Log -level INFO -message $message -logfile $RunLog  
+        Write-Log -level ERROR -message $message -logfile $RunLog  
         Write-Output $message
     }
     Finally{
         #After checking each file give the final results and some stats from the scan. 
         $message = "$SusItemsCount total suspicious files found"
         Write-Output $message
-        Add-Content -Path $Output -Value $Message
+        Add-Content -Path $ResultLog -Value $Message
         Write-Log -level INFO -message $message -logfile $RunLog   
 
         $sw.stop()
 
         $message = "Suspicious Extension check took $($sw.elapsed) to run"
-        Write-Output $message
+        Write-Verbose $message
         Write-Log -level INFO -message $message -logfile $RunLog
-        Add-Content -Path $Output -Value $Message
+        Add-Content -Path $ResultLog -Value $Message
     }
 
 }
