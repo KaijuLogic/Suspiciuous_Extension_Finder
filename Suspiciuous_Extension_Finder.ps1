@@ -48,8 +48,8 @@
 #>
 
 #################################### PARAMETERS ###################################
+[CmdletBinding()]
 param (
-    [CmdletBinding()]
     [Parameter(Mandatory=$true)]
     [ValidateScript({
         if (Test-Path $_ -PathType Container) {
