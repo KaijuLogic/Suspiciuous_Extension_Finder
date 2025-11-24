@@ -32,9 +32,12 @@ Suspicious_Extension_Finder.ps1 -path C:\Users\KaijuLogic\Downloads -extensions 
 ```
 
 ## EXAMPLE REPORT
+Output to .txt file
+```
 Suspicious extension [ .ps1 ] at C:\Users\KaijuLogic\Downloads\Example.ps1
 Suspicious extension [ .ps1 ] at C:\Users\KaijuLogic\Downloads\Test-Powershell.ps1
 Suspicious extension [ .zip ] at C:\Users\KaijuLogic\Downloads\ZippedFolder.zip
 Suspicious extension [ .iso ] at C:\Users\KaijuLogic\Downloads\debian-13.1.0-amd64-netinst.iso
 Suspicious hidden extension [ .ps1 ] at C:\Users\KaijuLogic\Downloads\GodzillaThinking.ps1.jpeg
 ....
+```
