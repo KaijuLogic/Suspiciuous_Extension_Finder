@@ -15,7 +15,7 @@ Suspicious_Extension_Finder.ps1 -path C:\Users\KaijuLogic\Downloads -extensions 
 ```
 
 ## EXAMPLE OUTPUT
-```PowerShell
+```
 2025-11-25 08:26:01 | INFO | Suspicious extension search script ran by KaijuLogic on PC1
 2025-11-25 08:26:01 | INFO | Loading extensions list from .\extensions-example.txt
 2025-11-25 08:26:01 | INFO | Loaded and normalised 32 case-insensitive extensions.
