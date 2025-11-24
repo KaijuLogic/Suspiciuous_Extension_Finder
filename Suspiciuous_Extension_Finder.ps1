@@ -1,9 +1,4 @@
 <#
-    .DISCLAIMER:
-    By using this content you agree to the following: This script may be used for legal purposes only. 
-    Users take full responsibility for any actions performed using this script. The author accepts no liability 
-    for any damage caused by this script.  
-
     .SYNOPSIS
     This script can be used to do a quick search for files that should receive additional review against a list of provided extensions. 
 
@@ -29,9 +24,13 @@
     .NOTES
     Created by: KaijuLogic
     Created Date: 4.2024
-    Last Modified Date: 16 Nov 2025
+    Last Modified Date: 25 Nov 2025
     Last Modified By: KaijuLogic
     Last Modification Notes: 
+        - 25 Nov, 2025
+            * Updated to match functions in my other scripts
+            * simplified logging with write-host in write-log function
+            * updated new folder function
         - 16 Nov, 2025
             * Cleaned up log folder creation a bit more
         - 15 Nov, 2025
@@ -47,7 +46,12 @@
 
     TO-DO: Done: Add better notes and more error checking
 		   Done: Add simple check for files that may be using multiple extensions
-			
+
+    .DISCLAIMER:
+    By using this content you agree to the following: This script may be used for legal purposes only. 
+    Users take full responsibility for any actions performed using this script. The author accepts no liability 
+    for any damage caused by this script.  
+
 #>
 
 #################################### PARAMETERS ###################################
@@ -60,7 +64,6 @@ param (
         } else {
             Exit
         }
-
     })]
     [String]$path,
 
@@ -78,10 +81,15 @@ param (
 ################################# SET COMMON VARIABLES ################################
 $CurrentDate = Get-Date
 $CurrentPath = Split-Path -Parent $PSCommandPath
-$GetFiles = Get-ChildItem $path -Recurse
 
-$RunLog = "$CurrentPath\runlogs\SusExtensionSearcher-Runlog-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
-$ResultLog = "$CurrentPath\results\SusExtensionSearcher-Result-$($CurrentDate.ToString("yyyy-MM-dd.HH.mm")).txt"
+$LogDateDir = $CurrentDate.ToString("yyyy-MM")
+$LogFileNameTime = $CurrentDate.ToString("yyyy-MM-dd_HH.mm.ss")
+
+$SusExtLogDir = Join-Path -Path $CurrentPath -ChildPath "SusExtensionsLogs\Reports\$LogDateDir"
+$RunLogDir = Join-Path -Path $CurrentPath -ChildPath "SusExtensionsLogs\RunLogs\$LogDateDir"
+
+$RunLog = Join-Path -Path $RunLogDir -ChildPath "SusExtensionFinder-Runlog-$LogFileNameTime.txt"
+$ResultLog = Join-Path -Path $SusExtLogDir -ChildPath "SusExtensionFinder-Result-$LogFileNameTime.txt"
 
 #$sw is simply to track how long the script has run for. If it's running too long you might want to break the scan into multiple pieces.
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -93,38 +101,43 @@ Function Write-Log{
     param(
         [Parameter(Mandatory=$false)]
         [ValidateSet("Info","WARN","ERROR","FATAL","DEBUG")]
-        [string]
-        $level = "INFO",
+        [string]$level = "INFO",
 
         [Parameter(Mandatory=$true)]
-        [string]
-        $Message,
+        [string]$Message,
 
         [Parameter(Mandatory=$true)]
-        [string]
-        $logfile
+        [string]$logfile
     )
     $Stamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     $Line = "$Stamp | $Level | $Message"
+
+    #To make our cli output look ~pretty~
+    $ColorDitcionary = @{"INFO" = "Cyan"; "WARN" = "Yellow"; "ERROR" = "Red"}
+    Write-Host $Line -ForegroundColor $ColorDitcionary[$Level]
+
     Add-content $logfile -Value $Line
 }
-#Creates necessary log folders and path if they do not already exist to allow for logs to be created. 
-Function Set-LogFolders {
-    ##Tests for and creates necessary folders and files for the script to run and log appropriately
-    $FolderList = ($RunLog,$ResultLog)
-    foreach ($Folder in $Folderlist){
-        $LogFolder = Split-Path $Folder -Parent
-        if (!(Test-Path $LogFolder)) {
-            Write-Verbose "$LogFolder does not exist, creating path"
-            try{
-                New-Item -Path $LogFolder -ItemType "directory" | out-null
-            }
-            catch{
-                Write-Warning "Issue Creating $LogFolder. ERROR: $($_.ErrorDetails.Message)"
-            }
+#Function to create folders and path if they do not already exist to allow for logs to be created. 
+Function Set-NewFolders {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$FolderPaths
+    )
+    ##Tests for and creates necessary folders and files for the script to run and log appropriatel
+	foreach ($Path in $FolderPaths){
+	    if (!(Test-Path $Path)){
+	        Write-Verbose "$Path does not exist, creating path"
+	        Try{
+	            New-Item -Path $Path -ItemType "directory" | out-null
+	        }
+	        Catch{
+	            Throw "Error creating path: $Path. Error provided: $($_.ErrorDetails.Message)"
+	        }
         }
-    }
+	}
 }
+
 #This function gets a list of files and compares them to the extensions list found in the extensions file. 
 Function Get-SusFilesTypes{
     #Initialize counting variables for, well, counting
@@ -147,32 +160,28 @@ Function Get-SusFilesTypes{
     }
     catch {
         Write-Log -level FATAL -message "Failed to read or process extensions file '$extensions'. Error: $_" -logfile $RunLog
-        Write-Error "Failed to read extensions file. Check runlog for details."
-        return
+        Throw "Failed to read extensions file. Check runlog for details."
     }
 
-    $message = "$($GetFiles.Count) total files/folders found"
-    Write-Output $message | Out-File $ResultLog -Append
-    Write-Log -level INFO -message $message -logfile $RunLog   
+    Write-Log -level INFO -message "$($GetFiles.Count) total files/folders found" -logfile $RunLog   
 
-    $message = "Starting scan on path: $path"
-    Write-Log -level INFO -message $message -logfile $RunLog  
-    Write-Output $message
+    Write-Log -level INFO -message "Starting scan on path: $path" -logfile $RunLog  
 
     #Comapre each item in the designated path to the list in the extensions file.  
     try{
-        Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | 
+        ForEach-Object {
             $FileCount++
-            $file = $_ # Assign to a variable for clarity
-            $foundExt = $false # Flag to prevent logging the same file twice
+            $file = $_ 
+            $foundExt = $false 
+            $Fullpath = $file.Fullname
 
             if ($ExtensionsHashSet.Contains($file.Extension)) {
                     $SusItemsCount++
-                    $Fullpath = $file.Fullname
-                    
+            
                     # Add context to the output
                     $Message = "Suspicious extension [ $($file.Extension) ] at $Fullpath"
-                    Write-Output $Message
+                    Write-Log -level WARN -message $Message -logfile $RunLog  
                     Add-Content -Path $ResultLog -Value $Message
                     $foundExt = $true
             }
@@ -185,10 +194,9 @@ Function Get-SusFilesTypes{
                 # Only log this if it wasn't found already
                 if (-not $foundExt) {
                     $SusItemsCount++
-                    $Fullpath = $file.Fullname
                     
                     $Message = "Suspicious hidden extension [ $hiddenExtension ] at $Fullpath"
-                    Write-Output $Message
+                    Write-Log -level WARN -message $Message -logfile $RunLog  
                     Add-Content -Path $ResultLog -Value $Message
                 }
             }
@@ -197,34 +205,41 @@ Function Get-SusFilesTypes{
     catch {
         $message = "Something went wrong during file processing scan ERROR: $_ "
         Write-Log -level ERROR -message $message -logfile $RunLog  
-        Write-Output $message
+        Throw $message
     }
     Finally{
         #After checking each file give the final results and some stats from the scan. 
         $message = "$SusItemsCount total suspicious files found"
-        Write-Output $message
         Add-Content -Path $ResultLog -Value $Message
         Write-Log -level INFO -message $message -logfile $RunLog   
 
         $sw.stop()
 
         $message = "Suspicious Extension check took $($sw.elapsed) to run"
-        Write-Verbose $message
         Write-Log -level INFO -message $message -logfile $RunLog
         Add-Content -Path $ResultLog -Value $Message
     }
 
 }
 #################################### EXECUTION #####################################
+Set-NewFolders -FolderPaths $SusExtLogDir,$RunLogDir
+
+Try{
+    $GetFiles = Get-ChildItem $path -Recurse
+}
+Catch{
+    Throw "Something went wrong gathering file list from $path. ERROR: $($_.ErrorDetails.Message)"
+}
 
 try {
-	Set-LogFolders
-    Write-Log -level INFO -message "Suspicious extension search script ran by $Env:UserName on $Env:ComputerName" -logfile $RunLog 
+    $Message = "Suspicious extension search script ran by $Env:UserName on $Env:ComputerName"
+    Write-Log -level INFO -message $Message -logfile $RunLog 
+    Add-Content -Path $ResultLog -Value $Message
     Get-SusFilesTypes
     Write-Log -level INFO -message "Script finished successfully." -logfile $RunLog 
 }
 catch {
     # Catch any terminating errors from parameter validation or other unhandled exceptions
-    Write-Log -level FATAL -message "Script failed to run with a fatal error: $_" -logfile $RunLog
-    Write-Error "Script failed for some reason. Check runlog for more details: $RunLog"
+    Write-Log -level ERROR -message "Script failed for some reason. ERROR: $($_.ErrorDetails.Message)" -logfile $RunLog
+    Throw "Script failed for some reason. ERROR: $($_.ErrorDetails.Message)"
 }
