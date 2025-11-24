@@ -7,6 +7,7 @@ Certain file types in secure environments should receive additional review to he
 ## FEATURES
 - Logging and report generation for review and tracking
 - Does a simple "low hanging fruit" check for double extensions in a file name
+- Since a hashset is used you can use a very large list of extensions with minimal impact to the scripts efficiency
 
 ## EXAMPLE
 ```PowerShell
