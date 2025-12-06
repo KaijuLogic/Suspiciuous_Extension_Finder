@@ -38,7 +38,7 @@
             * You might notice spelling inconsistency, recently moved and getting used to using difference spelling norms
             * Added [CmdletBinding()] to script parameters.
             * Added parameter validation for -Path and -Extensions. 
-            * Recently learned about "Hashsets", trying them out for effeciency if large extension lists are provided
+            * Implementing Hashsets
             * Added checks to make sure all names in the extension list are 'normalised'
             * Simplifying a few small things to make things a little less cluttered (ex: moving $user and $computer variables since they were only used once)
             * Added some more error catching
